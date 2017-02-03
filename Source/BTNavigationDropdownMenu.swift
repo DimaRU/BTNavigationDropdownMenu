@@ -220,7 +220,7 @@ open class BTNavigationDropdownMenu: UIView {
         }
     }
     
-    open var didSelectItemAtIndexHandler: ((_ indexPath: Int) -> ())?
+    open var didSelectItemAtIndexHandler: ((_ itemsSelected: [Bool]) -> ())?
     open var isShown: Bool!
 
     fileprivate weak var navigationController: UINavigationController?
@@ -301,13 +301,16 @@ open class BTNavigationDropdownMenu: UIView {
         let statusBarHeight = UIApplication.shared.statusBarFrame.height 
         self.tableView = BTTableView(frame: CGRect(x: menuWrapperBounds.origin.x, y: menuWrapperBounds.origin.y + 0.5, width: menuWrapperBounds.width, height: menuWrapperBounds.height + 300 - navBarHeight - statusBarHeight), items: items, title: title, configuration: self.configuration)
         
-        self.tableView.selectRowAtIndexPathHandler = { [weak self] (indexPath: Int) -> () in
+        self.tableView.selectRowAtIndexPathHandler = { [weak self] (itemsSelected: [Bool]) -> () in
             guard let selfie = self else {
                 return
             }
-            selfie.didSelectItemAtIndexHandler!(indexPath)
+            
+            // Send signal up
+            selfie.didSelectItemAtIndexHandler!(itemsSelected)
+            // Set title
             if selfie.shouldChangeTitleText! {
-                selfie.setMenuTitle("\(selfie.tableView.items[indexPath])")
+               // selfie.setMenuTitle("\(selfie.tableView.items[indexPath])")
             }
             self?.hideMenu()
             self?.layoutSubviews()
@@ -490,6 +493,7 @@ class BTConfiguration {
     var maskBackgroundColor: UIColor!
     var maskBackgroundOpacity: CGFloat!
     var shouldChangeTitleText: Bool!
+    var okButtonText: String!
     
     init() {
         self.defaultValue()
@@ -523,6 +527,7 @@ class BTConfiguration {
         self.maskBackgroundColor = UIColor.black
         self.maskBackgroundOpacity = 0.3
         self.shouldChangeTitleText = true
+        self.okButtonText = "OK"
     }
 }
 
@@ -531,11 +536,11 @@ class BTTableView: UITableView, UITableViewDelegate, UITableViewDataSource {
     
     // Public properties
     var configuration: BTConfiguration!
-    var selectRowAtIndexPathHandler: ((_ indexPath: Int) -> ())?
+    var selectRowAtIndexPathHandler: ((_ itemsSelected: [Bool]) -> ())?
     
     // Private properties
     fileprivate var items: [AnyObject]!
-    fileprivate var selectedIndexPath: Int?
+    fileprivate var itemsSelected: [Bool]!
     
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -545,7 +550,7 @@ class BTTableView: UITableView, UITableViewDelegate, UITableViewDataSource {
         super.init(frame: frame, style: UITableViewStyle.plain)
         
         self.items = items
-        self.selectedIndexPath = (items as! [String]).index(of: title)
+        self.itemsSelected = [Bool](repeating: false, count: items.count)
         self.configuration = configuration
         
         // Setup table view
@@ -571,7 +576,7 @@ class BTTableView: UITableView, UITableViewDelegate, UITableViewDataSource {
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.items.count
+        return self.items.count + 1
     }
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -580,19 +585,25 @@ class BTTableView: UITableView, UITableViewDelegate, UITableViewDataSource {
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = BTTableViewCell(style: UITableViewCellStyle.default, reuseIdentifier: "Cell", configuration: self.configuration)
-        cell.textLabel?.text = self.items[(indexPath as NSIndexPath).row] as? String
-        cell.checkmarkIcon.isHidden = ((indexPath as NSIndexPath).row == selectedIndexPath) ? false : true
+        if indexPath.row == self.items.count {
+            cell.textLabel?.text = self.configuration.okButtonText
+            cell.checkmarkIcon.isHidden = true
+        } else {
+            cell.textLabel?.text = self.items[indexPath.row] as? String
+            cell.checkmarkIcon.isHidden = !itemsSelected[indexPath.row]
+        }
         return cell
     }
     
     // Table view delegate
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        selectedIndexPath = (indexPath as NSIndexPath).row
-        self.selectRowAtIndexPathHandler!((indexPath as NSIndexPath).row)
-        self.reloadData()
-        let cell = tableView.cellForRow(at: indexPath) as? BTTableViewCell
-        cell?.contentView.backgroundColor = self.configuration.cellSelectionColor
-        cell?.textLabel?.textColor = self.configuration.selectedCellTextLabelColor
+        // Send signal
+        if indexPath.row == self.items.count {
+            self.selectRowAtIndexPathHandler!(itemsSelected)
+        } else {
+            itemsSelected[indexPath.row] = !itemsSelected[indexPath.row]    // Reverse selection
+            self.reloadData()
+        }
     }
     
     func tableView(_ tableView: UITableView, didDeselectRowAt indexPath: IndexPath) {
@@ -605,7 +616,11 @@ class BTTableView: UITableView, UITableViewDelegate, UITableViewDataSource {
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
         if self.configuration.shouldKeepSelectedCellColor == true {
             cell.backgroundColor = self.configuration.cellBackgroundColor
-            cell.contentView.backgroundColor = ((indexPath as NSIndexPath).row == selectedIndexPath) ? self.configuration.cellSelectionColor : self.configuration.cellBackgroundColor
+            if indexPath.row == self.items.count {
+                cell.contentView.backgroundColor = self.configuration.cellBackgroundColor
+            } else {
+                cell.contentView.backgroundColor = itemsSelected[indexPath.row] ? self.configuration.cellSelectionColor : self.configuration.cellBackgroundColor
+            }
         }
     }
 }
